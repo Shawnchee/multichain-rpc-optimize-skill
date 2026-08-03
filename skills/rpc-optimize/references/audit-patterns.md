@@ -81,13 +81,22 @@ That alone is 10×.
 ```bash
 rg -n "fromBlock:\s*['\"]earliest|fromBlock:\s*0"     # unbounded log queries
 rg -n 'getLogs' -A3                                    # topic filters present?
-rg -n 'batch:\s*\{'                                    # viem batching configured at all?
-rg -n 'multicall3|multicallAddress'                    # chain config aware of it?
 rg -n 'batchMaxCount'                                  # ethers batching — disable on Infura
 ```
 
-Absence of `batch: { multicall: true }` in a viem client with many
-`readContract` calls is a one-line, high-leverage finding.
+⚠️ **These two are inverted — no match IS the finding.** Every other pattern in
+this file reports a hit as a problem; these report an absence as a problem.
+Don't skip them because they came back empty.
+
+```bash
+rg -n 'batch:\s*\{'                 # viem batching configured at all?
+rg -n 'multicall3|multicallAddress' # chain config aware of Multicall3?
+```
+
+A viem client issuing many `readContract` calls with **no** `batch: { multicall: true }`
+is a one-line, high-leverage fix. And a chain config with **no** `multicall3`
+entry means wagmi is silently falling back to N individual `eth_call`s
+(see `evm.md` → silent-failure traps) — nothing throws, so grep is how you find it.
 
 **On Infura specifically**, any JSON-RPC array batching is *worse* than serial
 (N+1 billing). Look for `batchMaxCount` > 1 in ethers and transport-level
