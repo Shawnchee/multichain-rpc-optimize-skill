@@ -3,13 +3,17 @@
 Don't propose an optimization without a number. The repo ships a dependency-free
 harness — Node 18+, no install step.
 
-```bash
-node benchmarks/bench-evm.mjs     --n 50 --runs 3
-node benchmarks/bench-solana.mjs  --n 40 --runs 3
+Paths are relative to this skill's own directory — the harness is bundled, so
+it works from an installed skill with no repo checkout.
 
-# against the user's own endpoint (recommended — public endpoints throttle)
-node benchmarks/bench-evm.mjs    --rpc "$ALCHEMY_URL" --n 200
-node benchmarks/bench-solana.mjs --rpc "$HELIUS_URL"  --n 500
+```bash
+cd "$(dirname "$0")/../benchmarks"   # or: cd <skill-dir>/benchmarks
+node bench-evm.mjs     --n 50 --runs 3
+node bench-solana.mjs  --n 40 --runs 3
+
+# against the user's own endpoint — always prefer this
+node bench-evm.mjs    --rpc "$ALCHEMY_URL" --n 200
+node bench-solana.mjs --rpc "$HELIUS_URL"  --n 500
 ```
 
 Committed output: `benchmarks/RESULTS.md`.
@@ -38,9 +42,12 @@ Three things will mislead you if you don't watch for them:
    labels any timing they affected. A `serial` run showing 15s against public
    mainnet-beta is measuring the rate limiter, not the network. Cite those
    numbers as "what throttling feels like", never as clean latency.
-2. **Public endpoints have their own caps.** `solana-rpc.publicnode.com` rejects
-   `getMultipleAccounts` arrays in the low teens; public mainnet-beta blocks
-   batched `getAccountInfo` outright. Neither reflects a keyed endpoint.
+2. **Public endpoints have their own caps.** The Solana benchmark **probes** the
+   endpoint's real `getMultipleAccounts` limit and prints it — public
+   `solana-rpc.publicnode.com` caps at 10 against a protocol max of 100, and
+   public mainnet-beta blocks batched `getAccountInfo` outright. A run showing
+   "10x cheaper" on a capped endpoint would be ~40x on a keyed one. Always
+   re-run with `--rpc` before quoting a number to the user.
 3. **Latency and cost are different wins.** Batching improves latency and does
    nothing for cost. Aggregation improves both. Report them in separate columns —
    conflating them is exactly the confusion this skill exists to fix.
