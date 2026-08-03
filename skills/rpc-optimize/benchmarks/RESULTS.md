@@ -1,10 +1,15 @@
 # Benchmark Results
 
-Measured 2026-08-03 16:32 UTC against **public, unauthenticated endpoints**.
-Latency will differ on a paid endpoint; the **cost columns are provider-published rates**
-and are independent of which endpoint the timings came from.
+Measured 2026-08-03 16:44 UTC against **public, unauthenticated endpoints**.
+Latency differs on a paid endpoint; the **cost columns are provider-published rates**
+and are independent of which endpoint produced the timings.
 
-Reproduce: `node benchmarks/bench-evm.mjs` and `node benchmarks/bench-solana.mjs`.
+Reproduce: `npm run bench` (Node 18+, no install step).
+
+> Public endpoints impose their own caps. The Solana run below probed a
+> `getMultipleAccounts` limit of 10, well under the protocol max of 100 — so the
+> aggregation saving shown is ~10x. On a keyed endpoint allowing the full 100,
+> the same 40 reads collapse to a single call and the saving is ~40x.
 
 ## EVM — 50 ERC-20 balance reads
 
@@ -18,14 +23,14 @@ EVM balance-read benchmark
 
   correctness baseline: 7/50 holders with non-zero balance
 
-  serial (50 HTTP, 50 eth_call)                 889 ms   results match ✓
-  JSON-RPC batch (1 HTTP, 50 eth_call)          165 ms   results match ✓
-  Multicall3 (1 HTTP, 1 eth_call)               290 ms   results match ✓
+  serial (50 HTTP, 50 eth_call)                 848 ms   results match ✓
+  JSON-RPC batch (1 HTTP, 50 eth_call)          173 ms   results match ✓
+  Multicall3 (1 HTTP, 1 eth_call)               163 ms   results match ✓
 
   Latency
-    serial          889 ms  (1.0x faster than slowest)
-    batch           165 ms  (5.4x faster than slowest)
-    multicall3      290 ms  (3.1x faster than slowest)
+    serial          848 ms  (1.0x faster than slowest)
+    batch           173 ms  (4.9x faster than slowest)
+    multicall3      163 ms  (5.2x faster than slowest)
 
   Billable cost for 50 reads
                       alchemy      infura        ankr   quicknode
@@ -56,33 +61,35 @@ EVM balance-read benchmark
 ```
 
 Solana account-read benchmark
-  endpoint : https://api.mainnet-beta.solana.com
+  endpoint : https://solana-rpc.publicnode.com
   reads    : 40   runs: 3 (median reported)
   cost data verified 2026-08-04
 
+  endpoint getMultipleAccounts cap: 10  (below the protocol max of 100)
   correctness baseline: 16/40 accounts exist on-chain
 
-  serial (40 HTTP, 40 getAccountInfo)          15,730 ms   results match ✓  [66 rate-limit retries — timing inflated]
-  JSON-RPC batch (4 HTTP, 40 calls)            unavailable — HTTP 429: [ {"jsonrpc":"2.0","error":{"code": 429,"message
-                                               (public mainnet-beta blocks batched getAccountInfo; use a keyed endpoint)
-  getMultipleAccounts (1 HTTP/call)               404 ms   results match ✓
+  serial (40 HTTP, 40 getAccountInfo)           2,622 ms   results match ✓
+  JSON-RPC batch (4 HTTP, 40 calls)             1,120 ms   results match ✓
+  getMultipleAccounts (4 HTTP/call)               925 ms   results match ✓
 
   Latency
-    serial     15,730 ms  (1.0x faster than slowest)  ← throttled by public endpoint, not a clean latency number
-    gMA           404 ms  (38.9x faster than slowest)
+    serial      2,622 ms  (1.0x faster than slowest)
+    batch       1,120 ms  (2.3x faster than slowest)
+    gMA           925 ms  (2.8x faster than slowest)
 
   Billable cost for 40 account reads
                    alchemy     helius       ankr  quicknode     infura
     serial             400         40     20,000      1,200      6,400
-    gMA                 20          1        500         30        160
+    batch              400         40     20,000      1,200      6,560
+    gMA                 80          4      2,000        120        640
                       (CU)  (credits)  (credits)  (credits)  (credits)
 
   Savings, getMultipleAccounts vs serial
-    alchemy          400 ->     20 CU       20x cheaper
-    helius            40 ->      1 credits  40x cheaper
-    ankr          20,000 ->    500 credits  40x cheaper
-    quicknode      1,200 ->     30 credits  40x cheaper
-    infura         6,400 ->    160 credits  40x cheaper
+    alchemy          400 ->     80 CU       5x cheaper
+    helius            40 ->      4 credits  10x cheaper
+    ankr          20,000 ->  2,000 credits  10x cheaper
+    quicknode      1,200 ->    120 credits  10x cheaper
+    infura         6,400 ->    640 credits  10x cheaper
 
   NOTE: Helius does not document how it bills JSON-RPC array batches.
         Helius documents NO batching discount and NO per-element batch billing rule. Do not claim either. Assumed per-method here for modelling only.

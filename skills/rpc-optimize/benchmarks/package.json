@@ -1,0 +1,13 @@
+{
+  "name": "rpc-optimize-benchmarks",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Dependency-free RPC cost/latency benchmarks. Node 18+, no install step.",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "bench": "node bench-evm.mjs && node bench-solana.mjs",
+    "bench:evm": "node bench-evm.mjs",
+    "bench:solana": "node bench-solana.mjs"
+  }
+}

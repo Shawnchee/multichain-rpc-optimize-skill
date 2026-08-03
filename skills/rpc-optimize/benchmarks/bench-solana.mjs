@@ -21,7 +21,7 @@ const args = Object.fromEntries(
 
 const N = Number(args.n ?? 60)
 const RUNS = Number(args.runs ?? 3)
-const RPC = args.rpc ?? process.env.SOLANA_RPC_URL ?? 'https://api.mainnet-beta.solana.com'
+const RPC = args.rpc ?? process.env.SOLANA_RPC_URL ?? 'https://solana-rpc.publicnode.com'
 
 // Real mainnet accounts — programs, mints, sysvars. All exist, so the
 // correctness check compares real data rather than a wall of nulls.
@@ -87,9 +87,32 @@ async function viaBatch() {
   return out.map((r) => sig(r?.value ?? null))
 }
 
+/**
+ * The protocol max is 100, but endpoints impose their own lower caps
+ * (public publicnode rejects arrays in the low teens). Probe rather than assume —
+ * a hardcoded 100 turns into an opaque failure on someone else's endpoint.
+ */
+async function probeGmaCap() {
+  const probe = async (n) => {
+    try {
+      await client.call('getMultipleAccounts', [
+        Array.from({ length: n }, (_, i) => keys[i % keys.length]), OPTS])
+      return true
+    } catch { return false }
+  }
+  if (await probe(100)) return 100
+  let lo = 1, hi = 100
+  while (lo < hi - 1) {
+    const mid = Math.floor((lo + hi) / 2)
+    if (await probe(mid)) lo = mid; else hi = mid
+  }
+  return lo
+}
+let GMA_CAP = 100
+
 async function viaGetMultipleAccounts() {
   const out = []
-  for (const c of chunk(keys, 100)) {           // protocol max is 100 per call
+  for (const c of chunk(keys, GMA_CAP)) {
     const r = await client.call('getMultipleAccounts', [c, OPTS])
     out.push(...r.value)
   }
@@ -101,6 +124,9 @@ console.log(`  endpoint : ${RPC}`)
 console.log(`  reads    : ${N}   runs: ${RUNS} (median reported)`)
 console.log(`  cost data verified ${VERIFIED_ON}\n`)
 
+GMA_CAP = await probeGmaCap()
+console.log(`  endpoint getMultipleAccounts cap: ${GMA_CAP}${GMA_CAP < 100 ? '  (below the protocol max of 100)' : ''}`)
+
 const baseline = await viaGetMultipleAccounts()
 const live = baseline.filter((b) => b !== 'null').length
 console.log(`  correctness baseline: ${live}/${N} accounts exist on-chain\n`)
@@ -108,7 +134,7 @@ console.log(`  correctness baseline: ${live}/${N} accounts exist on-chain\n`)
 const strategies = [
   { key: 'serial', label: `serial (${N} HTTP, ${N} getAccountInfo)`, fn: viaSerial, billedN: N, method: 'getAccountInfo', strategy: 'serial' },
   { key: 'batch', label: `JSON-RPC batch (${Math.ceil(N / BATCH_CHUNK)} HTTP, ${N} calls)`, fn: viaBatch, billedN: N, method: 'getAccountInfo', strategy: 'batch' },
-  { key: 'gMA', label: `getMultipleAccounts (${Math.ceil(N / 100)} HTTP/call)`, fn: viaGetMultipleAccounts, billedN: Math.ceil(N / 100), method: 'getMultipleAccounts', strategy: 'aggregate' },
+  { key: 'gMA', label: `getMultipleAccounts (${Math.ceil(N / GMA_CAP)} HTTP/call)`, fn: viaGetMultipleAccounts, billedN: Math.ceil(N / GMA_CAP), method: 'getMultipleAccounts', strategy: 'aggregate' },
 ]
 
 const results = []
