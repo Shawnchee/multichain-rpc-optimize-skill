@@ -26,9 +26,14 @@ call. Measured, not estimated:
 | 40 Solana account reads | Alchemy | Helius | Ankr | QuickNode | Infura |
 |---|---|---|---|---|---|
 | serial (40 × `getAccountInfo`) | 400 CU | 40 | 20,000 | 1,200 | 6,400 |
+| JSON-RPC batch | 400 CU | 40 | 20,000 | 1,200 | **6,560** |
 | **`getMultipleAccounts`** | **20 CU** | **1** | **500** | **30** | **160** |
 
-Full output in [`benchmarks/RESULTS.md`](benchmarks/RESULTS.md).
+The Solana row assumes the protocol max of 100 keys per call. Public endpoints
+cap lower — the committed run probed a limit of 10, so it measured ~10× rather
+than ~40×. The benchmark prints whatever cap your endpoint actually enforces.
+
+Full output in [`skills/rpc-optimize/benchmarks/RESULTS.md`](skills/rpc-optimize/benchmarks/RESULTS.md).
 
 ## Install
 
@@ -52,12 +57,16 @@ RPC calls", "optimize my indexer" — and the skill loads itself.
 Node 18+. No install step, no dependencies.
 
 ```bash
-node benchmarks/bench-evm.mjs     --n 50 --runs 3
-node benchmarks/bench-solana.mjs  --n 40 --runs 3
+cd skills/rpc-optimize/benchmarks
+npm run bench                     # both suites
 
-# your own endpoint (recommended — public ones throttle hard)
-node benchmarks/bench-evm.mjs --rpc "$ALCHEMY_URL" --n 200
+# your own endpoint (recommended — public ones throttle and cap hard)
+node bench-evm.mjs    --rpc "$ALCHEMY_URL" --n 200
+node bench-solana.mjs --rpc "$HELIUS_URL"  --n 500
 ```
+
+The benchmarks live **inside** the skill, so an installed skill is
+self-contained — Claude can run them without the repo checked out.
 
 Each benchmark runs the same work three ways and **cross-checks every strategy
 against a baseline** — a strategy returning different data fails the run.
@@ -74,6 +83,7 @@ throttled number never gets reported as clean latency.
 | `references/providers.md` | Per-method costs and limits for all five providers |
 | `references/audit-patterns.md` | ripgrep patterns for finding waste in a codebase |
 | `references/benchmarking.md` | How to measure before/after honestly |
+| `benchmarks/` | Runnable harness, bundled so the skill is self-contained |
 
 ## Findings worth knowing even without the skill
 
@@ -90,7 +100,7 @@ throttled number never gets reported as clean latency.
 
 Costs verified 2026-08-04. Providers reprice without notice — re-verify before
 quoting as current. Machine-readable rates with source URLs live in
-[`benchmarks/lib/cost-model.mjs`](benchmarks/lib/cost-model.mjs).
+[`skills/rpc-optimize/benchmarks/lib/cost-model.mjs`](skills/rpc-optimize/benchmarks/lib/cost-model.mjs).
 
 Two things this repo deliberately does **not** claim:
 
