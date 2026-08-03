@@ -37,16 +37,22 @@ Full output in [`skills/rpc-optimize/benchmarks/RESULTS.md`](skills/rpc-optimize
 
 ## Install
 
+[![skills.sh](https://skills.sh/b/Shawnchee/multichain-rpc-optimize-skill)](https://skills.sh/Shawnchee/multichain-rpc-optimize-skill)
+
+```bash
+npx skills add Shawnchee/multichain-rpc-optimize-skill
+```
+
+Works across Claude Code, Cursor, Codex, Gemini CLI, Copilot, Cline, Windsurf and
+~30 other agents. The benchmark harness is bundled, so it comes along with the
+skill and runs from wherever it lands.
+
+Or clone and symlink for local development:
+
 ```bash
 git clone https://github.com/Shawnchee/multichain-rpc-optimize-skill.git
 cd multichain-rpc-optimize-skill
 ./install.sh          # symlinks skills/rpc-optimize into ~/.claude/skills/
-```
-
-Or manually:
-
-```bash
-ln -s "$PWD/skills/rpc-optimize" ~/.claude/skills/rpc-optimize
 ```
 
 Then just describe the problem — "I'm hitting my Alchemy daily limit", "too many
