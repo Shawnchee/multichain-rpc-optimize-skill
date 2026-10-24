@@ -26,7 +26,7 @@ Consequences that drove the layout:
   ("hitting my daily limit", "429 errors", "getProgramAccounts is slow") rather
   than describing the skill abstractly, because matching happens against how
   users phrase problems.
-- **`SKILL.md` stays short** (122 lines, 89 non-blank body). It holds the decision procedure and
+- **`SKILL.md` stays short** (126 lines, 93 non-blank body). It holds the decision procedure and
   nothing chain-specific beyond a routing instruction.
 - **Chain detail lives in `references/`**, so an EVM session never loads the
   Solana material. This is where the real context saving comes from.
@@ -42,14 +42,15 @@ serve both.
 The natural refactor is `rpc-optimize` + `rpc-optimize-evm` +
 `rpc-optimize-solana`. It was measured and rejected.
 
-**The shared core dominates.** Of `SKILL.md`'s 89 non-blank body lines, 58
-(**65%**) are chain-agnostic — the two-budget framing, the batching-versus-
-aggregation correction, the decision procedure, the spend formula. Only 12 lines
-are EVM-only and 17 Solana-only. Splitting duplicates the shared 65% into two
-files that must then be kept in sync, to save each session ~15 lines.
+**The shared core dominates.** Of `SKILL.md`'s 93 non-blank body lines, the
+script below tags 11 as EVM and 16 as Solana; the other 66 (**~71%**) are
+chain-agnostic — the two-budget framing, the batching-versus-aggregation
+correction, the decision procedure, the spend formula. Splitting duplicates that
+shared core into two files that must then be kept in sync, to save each session
+~15 lines.
 
 **The split already exists at the layer that matters.** The two chain references
-are 342 of the skill's 919 markdown lines (**37%**) and already load only on
+are 409 of the skill's 1,009 markdown lines (**41%**) and already load only on
 demand. A three-way split adds nothing there.
 
 Reproduce the split:
