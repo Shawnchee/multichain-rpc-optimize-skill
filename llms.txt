@@ -1,0 +1,89 @@
+# rpc-optimize
+
+> Cut JSON-RPC calls and provider costs on EVM and Solana. JSON-RPC batching does not reduce cost (every method in the batch is billed; Infura bills N+1); aggregation does (Multicall3, getMultipleAccounts).
+
+Generated from README.md by scripts/build-llms.mjs. Source: https://github.com/Shawnchee/multichain-rpc-optimize-skill
+
+**Rules.** Paste these into any LLM, or follow them when this file is fetched:
+
+You are helping reduce JSON-RPC calls and provider costs for an EVM and/or Solana
+app. Apply these rules. Do not invent provider prices: if a number is not below,
+say it is unverified and point to the provider's pricing page.
+
+COST FACTS (provider docs, verified 2026-08-04)
+- JSON-RPC batching (an array of requests in one HTTP call) does NOT cut cost.
+  Alchemy, Ankr and QuickNode bill every method inside the batch; Infura bills
+  N+1, worse than serial. Helius documents no batch rule; claim nothing.
+  Infura's docs call batching "multi-call". That is NOT Multicall3.
+- Aggregation DOES cut cost. EVM: Multicall3 at
+  0xcA11bde05977b3631167028862bE2a173976CA11 (250+ chains) turns N reads into
+  one eth_call. Solana: getMultipleAccounts takes up to 100 accounts per call
+  (protocol max; some endpoints cap lower, so probe before chunking by 100).
+  Measured: 200 ERC-20 balance reads were 200x cheaper via Multicall3.
+
+DECISION ORDER (stop at the first that applies)
+1. Push instead of poll. Polling every 2 s = 43,200 calls/day per watcher. Use
+   eth_subscribe / accountSubscribe / webhooks, but price it first: Alchemy
+   bills WebSockets and webhooks at 0.04 CU/byte.
+2. Cache immutable data forever: ERC-20 decimals/symbol/name, finalized blocks,
+   confirmed txs, contract code, mint metadata.
+3. Aggregate N reads at one block/slot: Multicall3 (EVM); getMultipleAccounts or
+   Anchor fetchMultiple (Solana); DAS getAssetsByOwner for tokens/NFTs.
+4. Filter scans. Solana getProgramAccounts: always filters + dataSlice; on Helius
+   use getProgramAccountsV2 (1 credit vs 10). On Alchemy, gPA bills 20 CU but
+   consumes 117 throughput CU. EVM eth_getLogs: set topics[0], keep block ranges
+   tight, never fromBlock 'earliest' on a hot path.
+5. Batch only for latency, never for cost, and not at all on Infura.
+6. Dedupe: one query cache (e.g. React Query staleTime) so components don't
+   refetch the same value.
+
+WHEN WRITING CODE
+- No RPC call inside a for/map loop. Promise.all(items.map(read)) is a multicall
+  waiting to happen.
+- Dependent reads still aggregate: one multicall for everything independent, a
+  second for what needs its results. An unconditional sleep() between reads is
+  rate-limit dodging; aggregate instead.
+- Pin blockNumber/slot when aggregating. Request the narrowest data: dataSlice,
+  base64 over jsonParsed, specific log topics.
+- Keep provider keys server-side. NEXT_PUBLIC_* keys get scraped and drained.
+
+LIBRARY TRAPS (silent: nothing throws)
+- viem: set batch: { multicall: true } on the client. Reads that pass account,
+  value, gas or nonce skip it and go out one by one. client.multicall returns
+  { result, status: 'success' } | { error, status: 'failure' }, not
+  data/'reverted' as the docs page says.
+- wagmi: if the chain config lacks contracts.multicall3, readContracts silently
+  falls back to N separate eth_calls.
+- ethers v6: no built-in Multicall3 (call aggregate3 through a Contract).
+  batchMaxCount is JSON-RPC batching; set it to 1 on Infura. Build providers
+  with a static network, new JsonRpcProvider(url, 'mainnet', { staticNetwork:
+  true }), or every high-level call (getBalance, contract reads...) also sends
+  eth_chainId (2x the bill on QuickNode and Ankr). staticNetwork: true without
+  a network argument is ignored.
+- Anchor: use program.account.x.fetchMultiple(keys), not keys.map(fetch).
+  program.account.x.all() is a getProgramAccounts scan.
+
+LIMITS
+- Multicall3 is EVM-only. On Solana the answer is getMultipleAccounts.
+- Multicall3 reads at one block; it cannot make archive queries cheap.
+- Providers reprice without notice. Re-check before quoting a rate as current.
+
+When auditing, rank fixes by calls saved per day and show before/after counts.
+
+## Skill
+
+- [SKILL.md](https://raw.githubusercontent.com/Shawnchee/multichain-rpc-optimize-skill/main/skills/rpc-optimize/SKILL.md): decision procedure, what to check first
+- [llms-full.txt](https://raw.githubusercontent.com/Shawnchee/multichain-rpc-optimize-skill/main/llms-full.txt): the whole skill and all references in one file
+
+## References
+
+- [evm.md](https://raw.githubusercontent.com/Shawnchee/multichain-rpc-optimize-skill/main/skills/rpc-optimize/references/evm.md): Multicall3, viem/ethers/wagmi traps, eth_getLogs limits, staged multicalls
+- [solana.md](https://raw.githubusercontent.com/Shawnchee/multichain-rpc-optimize-skill/main/skills/rpc-optimize/references/solana.md): getMultipleAccounts, Anchor, getProgramAccounts, DAS, subscriptions
+- [providers.md](https://raw.githubusercontent.com/Shawnchee/multichain-rpc-optimize-skill/main/skills/rpc-optimize/references/providers.md): verified per-method costs and limits for Alchemy, Infura, Ankr, QuickNode, Helius
+- [audit-patterns.md](https://raw.githubusercontent.com/Shawnchee/multichain-rpc-optimize-skill/main/skills/rpc-optimize/references/audit-patterns.md): ripgrep patterns for finding RPC waste in an existing repo
+- [benchmarking.md](https://raw.githubusercontent.com/Shawnchee/multichain-rpc-optimize-skill/main/skills/rpc-optimize/references/benchmarking.md): how to measure before/after on your own endpoint
+
+## Optional
+
+- [RESULTS.md](https://raw.githubusercontent.com/Shawnchee/multichain-rpc-optimize-skill/main/skills/rpc-optimize/benchmarks/RESULTS.md): measured benchmark output
+- [COST-MODEL.md](https://raw.githubusercontent.com/Shawnchee/multichain-rpc-optimize-skill/main/docs/COST-MODEL.md): where every rate comes from and how it is verified
