@@ -31,6 +31,10 @@ rg -n -U 'Promise\.all\([\s\S]{0,200}?\.map\([\s\S]{0,300}?(readContract|\.read\
 rg -n -B2 -A2 'for\s*\(.*\)\s*\{' -g '*.ts' -g '*.tsx' \
   | rg -B2 -A2 'await.*(getAccountInfo|readContract|\.read\.|provider\.|connection\.)'
 
+# sleep/delay between reads — rate-limit dodging, i.e. serialized reads that should be aggregated
+# (ignore hits inside retry/backoff-after-429 handlers; the smell is an unconditional pause)
+rg -n -e 'await (sleep|delay|wait)\(' -e 'new Promise\(\s*\(?\w*\)?\s*=>\s*setTimeout' -g '!node_modules'
+
 # Anchor: per-account fetch that should be fetchMultiple
 rg -n 'program\.account\.\w+\.fetch\(' -g '*.ts' -g '*.tsx'
 ```
@@ -84,14 +88,26 @@ rg -n 'getLogs' -A3                                    # topic filters present?
 rg -n 'batchMaxCount'                                  # ethers batching — disable on Infura
 ```
 
-⚠️ **These two are inverted — no match IS the finding.** Every other pattern in
-this file reports a hit as a problem; these report an absence as a problem.
-Don't skip them because they came back empty.
+⚠️ **These two, and the ethers check below them, are inverted: no match IS the
+finding.** Every other pattern in this file reports a hit as a problem; these
+report an absence as a problem. Don't skip them because they came back empty.
 
 ```bash
 rg -n 'batch:\s*\{'                 # viem batching configured at all?
 rg -n 'multicall3|multicallAddress' # chain config aware of Multicall3?
 ```
+
+```bash
+# ethers: files that build a JsonRpcProvider but never mention staticNetwork
+rg -l 'new JsonRpcProvider\(' -g '!node_modules' . | while read -r f; do rg -q staticNetwork "$f" || echo "$f"; done
+```
+
+Inverted, like the two above: a file listed here lacks `staticNetwork`, and that is the finding. An ethers
+`JsonRpcProvider` with no static network sends a hidden `eth_chainId` with every
+high-level call — 2× the bill on QuickNode and Ankr (see `evm.md` → hidden
+`eth_chainId`). The check is per file, so for files that *do* mention it, read
+each constructor: one provider can be pinned while another in the same file isn't,
+and `staticNetwork: true` with `network` undefined is ignored.
 
 A viem client issuing many `readContract` calls with **no** `batch: { multicall: true }`
 is a one-line, high-leverage fix. And a chain config with **no** `multicall3`

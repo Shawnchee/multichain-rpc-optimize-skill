@@ -91,6 +91,8 @@ Stop at the first rule that applies.
 - Pin an explicit `blockNumber`/`slot` when aggregating — consistent and cacheable.
 - Request the narrowest data: `dataSlice`, `base64` over `jsonParsed`, specific log `topics`.
 - Put the provider key behind a server route. `NEXT_PUBLIC_*` keys get scraped and drained — a real cause of mystery overage that no batching will fix.
+- Reads that depend on other reads still aggregate: one multicall for everything independent, a second for what needs its results. An unconditional `sleep()` between reads is rate-limit dodging — aggregate instead.
+- ethers v6: construct `JsonRpcProvider` with a static network (`new JsonRpcProvider(url, 'mainnet', { staticNetwork: true })`), or it sends a hidden `eth_chainId` with every high-level call — 2× the bill on QuickNode and Ankr.
 
 ## Diagnosing an existing project
 

@@ -4,7 +4,8 @@
 
 - [Multicall3](#multicall3)
 - [viem](#viem) · [The two silent-failure traps](#the-two-silent-failure-traps)
-- [ethers v6](#ethers-v6) · [Sizing](#sizing-a-multicall)
+- [ethers v6](#ethers-v6) · [The hidden `eth_chainId`](#the-hidden-eth_chainid-on-every-call)
+- [Dependent reads](#dependent-reads--stage-the-multicall-dont-serialize) · [Sizing](#sizing-a-multicall)
 - [eth_getLogs](#eth_getlogs) · [Cache-forever list](#cache-forever-list)
 
 ## Multicall3
@@ -127,6 +128,72 @@ package; its README points at the third-party `ext-provider-multicall`.
 (default 1 MiB), `batchStallTime` (default 10 ms) do **JSON-RPC array batching**,
 not aggregation. Set `batchMaxCount: 1` to disable — worth doing on Infura, where
 batching costs N+1.
+
+### The hidden `eth_chainId` on every call
+
+By default a `JsonRpcProvider` re-detects the network on every high-level call
+(`getBalance`, `call`, `getBlock`, contract reads, …): after the first one,
+`AbstractProvider.getNetwork()` runs `_detectNetwork()` (an `eth_chainId`)
+alongside each call to assert the chain hasn't changed
+(`lib.esm/providers/abstract-provider.js`, ethers 6.17.0). Raw `provider.send()`
+skips this. Nothing in your code shows it.
+
+Measured 2026-10-24 on Infura Ethereum mainnet: 5 × `getBalance` → **10 billed
+calls** (5 `eth_chainId` + 5 `eth_getBalance`, paired into 5 HTTP batches). What
+the extra call costs depends entirely on the provider's `eth_chainId` rate.
+Only the Infura call count was measured; the overhead column is computed from
+the published rates in `providers.md`:
+
+| Provider | `eth_chainId` | Billed overhead on a `getBalance` loop |
+|---|---|---|
+| Alchemy | 0 CU (5 throughput CU) | none billed, still eats rate limit |
+| Infura | 5 credits | +6% |
+| QuickNode | 20 credits | **2×** |
+| Ankr | 200 credits | **2×** |
+
+Fix — pin the network. `staticNetwork: true` **only takes effect when a network
+is also passed**; with `network` undefined it is silently ignored
+(`JsonRpcApiProvider` constructor, `lib.esm/providers/provider-jsonrpc.js`,
+ethers 6.17.0 — this has shifted across 6.x minors, so re-check on upgrade):
+
+```ts
+new JsonRpcProvider(url, 'mainnet', { staticNetwork: true })
+// or
+new JsonRpcProvider(url, undefined, { staticNetwork: Network.from(1) })
+```
+
+Verified: with a static network, 2 × `getBalance` → 2 calls.
+
+## Dependent reads — stage the multicall, don't serialize
+
+"I need `latestRoundData` before I can ask for `getRoundData(roundId - 1)`" is
+not a reason to read one call at a time. Split reads by dependency, not by item:
+
+- **Stage A** — every read that needs nothing else, across **all** items, in one multicall.
+- **Stage B** — every read that needs a Stage A result, across all items, in a second multicall.
+
+Two round trips total, however many items there are.
+
+Measured 2026-10-24 on the Base public RPC, checking 11 Chainlink-style feeds
+(description, decimals, `latestRoundData`, `phaseId`, a TWAP read, then
+`phaseAggregators` + 5 × `getRoundData` from the results):
+
+| | `eth_call`s | Wall time |
+|---|---:|---:|
+| Per feed, per read, `sleep(150)` between each | 121 | 49.9 s |
+| 2-stage `client.multicall` | **5** | **0.65 s** |
+
+Outputs were identical. Two caveats on the numbers: ~18 s of the 49.9 s was the
+deliberate `sleep(150)` calls, so the latency ratio is inflated by them; and 5
+rather than 2 calls is viem's default 1,024-byte multicall chunking (see
+[automatic batching](#automatic-batching--the-setting-almost-nobody-turns-on)) —
+`batchSize: 0` sends 2 (measured: 2 calls, 0.61 s, all 121 reads successful). Use `allowFailure: true` so one feed with short history
+doesn't throw away the rest.
+
+**An unconditional `sleep()` between reads is a symptom.** It means the code is
+dodging a rate limit by spending time instead of calls. Aggregating removes the
+reason for the sleep. (Backoff *after* a 429 is fine — that's error handling,
+not a pacing loop.)
 
 ## Sizing a multicall
 
