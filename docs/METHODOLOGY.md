@@ -53,8 +53,8 @@ Every benchmark computes a baseline, then compares each strategy against it
 element-by-element:
 
 ```
-serial (200 HTTP, 200 eth_call)      3,501 ms   results match ✓
-JSON-RPC batch (1 HTTP, 200 calls)     342 ms   results match ✓
+serial (200 HTTP, 200 eth_call)      3,508 ms   results match ✓
+JSON-RPC batch (1 HTTP, 200 calls)     349 ms   results match ✓
 Multicall3 (1 HTTP, 1 eth_call)        166 ms   results match ✓
 ```
 
@@ -108,8 +108,9 @@ Three things will mislead you if you skim:
    10-key-capped endpoint is ~60× at the protocol maximum. Re-run with `--rpc`
    against a keyed endpoint before quoting a figure to anyone.
 3. **Aggregation is not always the latency winner.** In the 60-read Solana run,
-   `getMultipleAccounts` was marginally slower than batching (1,406 ms vs
-   1,248 ms) while being 10× cheaper. Report the cost win on its own merits.
+   `getMultipleAccounts` and batching were within noise of each other (1,394 ms
+   vs 1,426 ms) while `getMultipleAccounts` was 5–10× cheaper. Report the cost
+   win on its own merits.
 
 ## Known limitations
 

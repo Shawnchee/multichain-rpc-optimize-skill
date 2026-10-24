@@ -46,7 +46,8 @@ Three things will mislead you if you don't watch for them:
    endpoint's real `getMultipleAccounts` limit and prints it — public
    `solana-rpc.publicnode.com` caps at 10 against a protocol max of 100, and
    public mainnet-beta blocks batched `getAccountInfo` outright. A run showing
-   "10x cheaper" on a capped endpoint would be ~40x on a keyed one. Always
+   "10x cheaper" for 60 reads on that endpoint would be 60x (30x on Alchemy) on
+   a keyed one allowing 100 per call. Always
    re-run with `--rpc` before quoting a number to the user.
 3. **Latency and cost are different wins.** Batching improves latency and does
    nothing for cost. Aggregation improves both. Report them in separate columns —
@@ -66,11 +67,13 @@ and backoff), `lib/abi.mjs` (hand-rolled encoding, no deps), and
 
 ## Sanity numbers
 
-Measured 2026-08-04 on public endpoints (see `RESULTS.md`):
+Computed from the published rates in `lib/cost-model.mjs` (verified 2026-08-04);
+the harness measured the same ratios live at 200 / 60 reads (see `RESULTS.md`):
 
 - 50 EVM balance reads: Multicall3 is **50× cheaper** than serial on every
   provider, and the JSON-RPC batch costs the same as serial (more on Infura).
-- 40 Solana account reads: `getMultipleAccounts` is **20–40× cheaper**.
+- 40 Solana account reads: `getMultipleAccounts` is **40× cheaper** (20× on
+  Alchemy, which prices it at 2× `getAccountInfo`).
 - `dataSlice(0,32)` cut an 8-account response from **142,073 → 1,729 bytes**
   at identical billable cost.
 

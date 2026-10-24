@@ -18,7 +18,9 @@ provider that documents the rule bills each method *inside* the batch:
 - **Helius**: documents no batch rule at all. Do not claim one either way.
 
 What saves money is **aggregation** — collapsing N logical reads into 1 billable
-method call. Measured, not estimated (`benchmarks/`, run 2026-08-04):
+method call. Computed from the published rates (`benchmarks/lib/cost-model.mjs`,
+verified 2026-08-04); the bundled harness reproduces these ratios live — see
+`benchmarks/RESULTS.md`:
 
 | 50 EVM balance reads | Alchemy | Infura | Ankr | QuickNode |
 |---|---|---|---|---|
@@ -31,7 +33,7 @@ method call. Measured, not estimated (`benchmarks/`, run 2026-08-04):
 | serial (40 × `getAccountInfo`) | 400 CU | 40 | 20,000 | 1,200 | 6,400 |
 | **`getMultipleAccounts` (1 call)** | **20 CU** | **1** | **500** | **30** | **160** |
 
-50× and 40× respectively. Batching moves neither number.
+50× and 40× respectively (20× on Alchemy for Solana). Batching moves neither number.
 
 > ⚠️ **Infura's docs call JSON-RPC batching "multi-call."** That is *not*
 > Multicall3. On Infura, "multi-call" is the thing that costs N+1 credits;
